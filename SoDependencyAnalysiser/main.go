@@ -83,14 +83,24 @@ func findDependencyPath(graph DependencyGraph, depender, dependee string, visite
 	return false
 }
 
+// showDependencyTree 以树形结构展示所有依赖
+func showDependencyTree(graph DependencyGraph, root string, level int) {
+	fmt.Printf("%s%s\n", strings.Repeat("  ", level), root)
+
+	for _, dependency := range graph[root] {
+		showDependencyTree(graph, dependency, level+1)
+	}
+}
+
 func main() {
-	if len(os.Args) < 7 {
-		fmt.Println("Usage: go run script.go --search-path <so_path> --depender <depender> --dependee <dependee>")
+	if len(os.Args) < 5 {
+		fmt.Println("Usage: go run script.go --search-path <so_path> (--depender <depender> --dependee <dependee> | --show-dependence-of <dependency>)")
 		os.Exit(1)
 	}
 
 	// 解析命令行参数
-	var soPath, depender, dependee string
+	var soPath, depender, dependee, showDependencyOf string
+	var showDependencyTreeMode bool
 
 	for i := 1; i < len(os.Args)-1; i += 2 {
 		switch os.Args[i] {
@@ -100,10 +110,13 @@ func main() {
 			depender = os.Args[i+1]
 		case "--dependee":
 			dependee = os.Args[i+1]
+		case "--show-dependence-of":
+			showDependencyOf = os.Args[i+1]
+			showDependencyTreeMode = true
 		}
 	}
 
-	if soPath == "" || depender == "" || dependee == "" {
+	if soPath == "" || (depender == "" && dependee == "" && showDependencyOf == "") {
 		fmt.Println("Invalid arguments.")
 		os.Exit(1)
 	}
@@ -116,10 +129,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	visited := make(map[string]bool)
-	path := make([]string, 0)
+	if showDependencyTreeMode {
+		showDependencyTree(graph, showDependencyOf, 0)
+	} else {
+		visited := make(map[string]bool)
+		path := make([]string, 0)
 
-	if !findDependencyPath(graph, depender, dependee, visited, path) {
-		fmt.Printf("No dependency path found from %s to %s\n", depender, dependee)
+		if !findDependencyPath(graph, depender, dependee, visited, path) {
+			fmt.Printf("No dependency path found from %s to %s\n", depender, dependee)
+		}
 	}
 }
