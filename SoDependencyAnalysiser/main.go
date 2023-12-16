@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -25,7 +26,6 @@ func collectDependencies(soPath string, graph DependencyGraph) error {
 				return err
 			}
 
-
 			graph[filepath.Base(path)] = dependencies
 		}
 
@@ -33,32 +33,6 @@ func collectDependencies(soPath string, graph DependencyGraph) error {
 	})
 
 	return err
-}
-
-// getSODependencies 使用 readelf 获取指定 .so 文件的依赖关系
-func getSODependencies(soPath string) ([]string, error) {
-	cmd := exec.Command("readelf", "-d", soPath)
-	output, err := cmd.Output()
-	if err != nil {
-		return nil, err
-	}
-
-	dependencies := make([]string, 0)
-
-	scanner := bufio.NewScanner(strings.NewReader(string(output)))
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.Contains(line, "NEEDED") {
-			fields := strings.Fields(line)
-			if len(fields) >= 2 {
-				dependency := strings.Trim(fields[4], "[]")
-				dependencies = append(dependencies, dependency)
-				// fmt.Printf("%v -> %v\n", soPath, dependency)
-			}
-		}
-	}
-
-	return dependencies, nil
 }
 
 // findDependencyPath 查找两个 .so 文件之间的依赖路径
@@ -83,12 +57,42 @@ func findDependencyPath(graph DependencyGraph, depender, dependee string, visite
 	return false
 }
 
-// showDependencyTree 以树形结构展示所有依赖
-func showDependencyTree(graph DependencyGraph, root string, level int) {
-	fmt.Printf("%s%s\n", strings.Repeat("  ", level), root)
+// getSODependencies 使用 readelf 获取指定 .so 文件的依赖关系
+func getSODependencies(soPath string) ([]string, error) {
+	cmd := exec.Command("readelf", "-d", soPath)
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
 
-	for _, dependency := range graph[root] {
-		showDependencyTree(graph, dependency, level+1)
+	dependencies := make([]string, 0)
+
+	scanner := bufio.NewScanner(strings.NewReader(string(output)))
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.Contains(line, "NEEDED") {
+			fields := strings.Fields(line)
+			if len(fields) >= 2 {
+				dependency := strings.Trim(fields[4], "[]")
+				dependencies = append(dependencies, dependency)
+			}
+		}
+	}
+
+	return dependencies, nil
+}
+
+// showDependencyTreeWithNumberAndIndent 以树形结构展示所有依赖，编号并缩进
+func showDependencyTreeWithNumberAndIndent(graph DependencyGraph, root string, indent string, number string) {
+	fmt.Printf("%s%s %s\n", indent, number, root)
+
+	children := graph[root]
+	sort.Strings(children)
+
+	for i, child := range children {
+		newIndent := fmt.Sprintf("%s  ", indent)
+		newNumber := fmt.Sprintf("%s.%d", number, i+1)
+		showDependencyTreeWithNumberAndIndent(graph, child, newIndent, newNumber)
 	}
 }
 
@@ -130,7 +134,7 @@ func main() {
 	}
 
 	if showDependencyTreeMode {
-		showDependencyTree(graph, showDependencyOf, 0)
+		showDependencyTreeWithNumberAndIndent(graph, showDependencyOf, "", "1")
 	} else {
 		visited := make(map[string]bool)
 		path := make([]string, 0)
